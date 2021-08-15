@@ -42,3 +42,18 @@ export default {
 ```
 
 2. `cargo test --ignored`
+
+## CLI Usage
+
+```
+./target/debug/opensea-cli -h
+Usage: ./target/debug/opensea-cli [OPTIONS]
+
+Optional arguments:
+  -h, --help
+  -u, --url URL          The tracing / archival node's URL (default: http://localhost:8545)
+  -p, --private-key PRIVATE-KEY
+                         Your private key string
+  -a, --address ADDRESS  The NFT address you want to buy
+  -i, --id ID            The NFT id you want to buy
+```

@@ -58,7 +58,6 @@ async fn main() -> color_eyre::Result<()> {
 
     // TODO: Automatic gas estimation for 1559 txs
     let call = call.gas_price(parse_units(100, 9).unwrap());
-    dbg!(&call);
 
     let sent = call.send().await.unwrap();
     println!("Sent tx {:?}", *sent);
