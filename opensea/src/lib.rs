@@ -106,7 +106,8 @@ impl<M: Middleware> Client<M> {
         // get the call
         let call = self
             .contracts
-            // Abigen error:
+            // Abigen error, doesn't generate a correct signature for function with underscore
+            // in its name
             .method(
                 "atomicMatch_",
                 (
@@ -179,12 +180,14 @@ mod tests {
             timestamp: Some(timestamp - 100),
             token_number: None,
         };
+        dbg!(&args);
 
         // instantiate the client
         let client = Client::new(provider.clone(), OpenSeaApiConfig::default());
 
         // execute the call
         let call = client.buy(args).await.unwrap();
+        dbg!(&hex::encode(call.calldata().unwrap()));
         let call = call.gas_price(parse_units(100, 9).unwrap());
         let sent = call.send().await.unwrap();
 

@@ -166,6 +166,7 @@ pub struct Order {
     pub fee_method: u8,
 }
 
+#[derive(Clone, Debug)]
 pub struct BuyArgs {
     pub taker: Address,
     pub recipient: Address,
@@ -173,7 +174,6 @@ pub struct BuyArgs {
     pub token_id: U256,
     // for 1155s
     pub token_number: Option<U256>,
-    #[cfg(test)]
     pub timestamp: Option<u64>,
 }
 
@@ -208,12 +208,9 @@ impl Order {
         };
         order.calldata = calldata;
 
-        #[cfg(test)]
         let listing_time = args
             .timestamp
             .unwrap_or_else(|| chrono::offset::Local::now().timestamp() as u64);
-        #[cfg(not(test))]
-        let listing_time = chrono::offset::Local::now().timestamp() as u64;
         order.listing_time = (listing_time - 100).into();
 
         order
@@ -234,7 +231,7 @@ pub struct AssetId {
 }
 
 use serde::de;
-fn u256_from_dec_str<'de, D>(deserializer: D) -> Result<U256, D::Error>
+pub fn u256_from_dec_str<'de, D>(deserializer: D) -> Result<U256, D::Error>
 where
     D: de::Deserializer<'de>,
 {
