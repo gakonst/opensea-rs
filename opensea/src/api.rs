@@ -1,4 +1,4 @@
-use ethers_core::types::Address;
+use ethers::types::Address;
 use reqwest::{
     header::{self, HeaderMap},
     Client, ClientBuilder,
@@ -49,6 +49,7 @@ impl OpenSeaApi {
 
         let res = self.client.get(url).query(&map).send().await?;
         let text = res.text().await?;
+        // dbg!(&text);
         let resp: OrderResponse = serde_json::from_str(&text)?;
 
         Ok(resp.orders)
@@ -112,8 +113,8 @@ mod tests {
 
         let req = OrderRequest {
             side: 1,
-            token_id: 468,
-            contract_address: "0x772c9181b0596229ce5ba898772ce45188284379"
+            token_id: 2292,
+            contract_address: "0x7d256d82b32d8003d1ca1a1526ed211e6e0da9e2"
                 .parse()
                 .unwrap(),
             limit: 99,
@@ -122,7 +123,7 @@ mod tests {
         let order = api.get_order(req).await.unwrap();
         let order = MinimalOrder::from(order);
         assert_eq!(order.target, addr);
-        assert_eq!(order.maker_relayer_fee, 550.into());
+        assert_eq!(order.maker_relayer_fee, 600.into());
         assert_eq!(order.taker_relayer_fee, 0.into());
         assert_eq!(order.maker_protocol_fee, 0.into());
         assert_eq!(order.taker_protocol_fee, 0.into());

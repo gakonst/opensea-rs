@@ -1,5 +1,8 @@
-use crate::constants;
-use ethers_core::types::{Address, Bytes, H256, U256};
+use crate::{constants, contracts};
+use ethers::{
+    core::utils::id,
+    types::{Address, Bytes, H256, U256},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
@@ -65,7 +68,7 @@ pub struct MinimalOrder {
 
     pub static_extradata: Bytes,
 
-    pub v: u64,
+    pub v: u8,
     pub r: H256,
     pub s: H256,
 }
@@ -90,7 +93,7 @@ impl From<Order> for MinimalOrder {
             calldata: order.calldata,
             replacement_pattern: order.replacement_pattern,
             static_extradata: order.static_extradata,
-            v: order.v,
+            v: order.v as u8,
             r: order.r,
             s: order.s,
             maker_relayer_fee: order.maker_relayer_fee,
@@ -106,61 +109,61 @@ impl From<Order> for MinimalOrder {
 /// The response we get from the API
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Order {
-    id: u64,
-    asset: Asset,
-    listing_time: u64,
-    expiration_time: u64,
-    order_hash: H256,
-    v: u64,
-    r: H256,
-    s: H256,
+    pub id: u64,
+    pub asset: Asset,
+    pub listing_time: u64,
+    pub expiration_time: u64,
+    pub order_hash: H256,
+    pub v: u64,
+    pub r: H256,
+    pub s: H256,
     #[serde(deserialize_with = "u256_from_dec_str")]
-    base_price: U256,
-    side: u8,
-    sale_kind: u8,
-    target: Address,
-    how_to_call: u8,
-    approved_on_chain: bool,
-    cancelled: bool,
-    finalized: bool,
-    marked_invalid: bool,
-    fee_recipient: User,
-    maker: User,
-
-    #[serde(deserialize_with = "u256_from_dec_str")]
-    salt: U256,
-
-    payment_token: Address,
-    #[serde(deserialize_with = "u256_from_dec_str")]
-    extra: U256,
+    pub base_price: U256,
+    pub side: u8,
+    pub sale_kind: u8,
+    pub target: Address,
+    pub how_to_call: u8,
+    pub approved_on_chain: bool,
+    pub cancelled: bool,
+    pub finalized: bool,
+    pub marked_invalid: bool,
+    pub fee_recipient: User,
+    pub maker: User,
 
     #[serde(deserialize_with = "u256_from_dec_str")]
-    maker_protocol_fee: U256,
-    #[serde(deserialize_with = "u256_from_dec_str")]
-    maker_relayer_fee: U256,
-    #[serde(deserialize_with = "u256_from_dec_str")]
-    maker_referrer_fee: U256,
+    pub salt: U256,
 
+    pub payment_token: Address,
     #[serde(deserialize_with = "u256_from_dec_str")]
-    taker_protocol_fee: U256,
-    #[serde(deserialize_with = "u256_from_dec_str")]
-    taker_relayer_fee: U256,
-
-    calldata: Bytes,
-    replacement_pattern: Bytes,
-
-    static_target: Address,
-    static_extradata: Bytes,
-
-    exchange: Address,
-    taker: User,
+    pub extra: U256,
 
     #[serde(deserialize_with = "u256_from_dec_str")]
-    quantity: U256,
+    pub maker_protocol_fee: U256,
+    #[serde(deserialize_with = "u256_from_dec_str")]
+    pub maker_relayer_fee: U256,
+    #[serde(deserialize_with = "u256_from_dec_str")]
+    pub maker_referrer_fee: U256,
 
-    metadata: Metadata,
+    #[serde(deserialize_with = "u256_from_dec_str")]
+    pub taker_protocol_fee: U256,
+    #[serde(deserialize_with = "u256_from_dec_str")]
+    pub taker_relayer_fee: U256,
 
-    fee_method: u8,
+    pub calldata: Bytes,
+    pub replacement_pattern: Bytes,
+
+    pub static_target: Address,
+    pub static_extradata: Bytes,
+
+    pub exchange: Address,
+    pub taker: User,
+
+    #[serde(deserialize_with = "u256_from_dec_str")]
+    pub quantity: U256,
+
+    pub metadata: Metadata,
+
+    pub fee_method: u8,
 }
 
 pub struct BuyArgs {
@@ -176,29 +179,34 @@ pub struct BuyArgs {
 
 impl Order {
     pub fn match_sell(&self, args: BuyArgs) -> MinimalOrder {
-        let schema = &self.metadata.schema;
-        use ethers_contract::BaseContract;
-        // TODO: Add 1155 support
-        let abi = ethers_core::abi::parse_abi(&[
-            "function transferFrom(address from, address to, uint256 tokenId) public returns (bool)",
-        ]).unwrap();
-        let abi = BaseContract::from(abi);
+        let mut order = MinimalOrder::from(self.clone());
 
+        // buy order
+        order.side = 0;
+        // the order maker is our taker
+        order.maker = args.taker;
+        order.taker = self.maker.address;
+        order.target = args.token;
+        order.expiration_time = 0.into();
+        order.extra = 0.into();
+        order.salt = ethers::core::rand::random::<u64>().into();
+        order.fee_recipient = Address::zero(); // *constants::OPENSEA_FEE_RECIPIENT;
+
+        let schema = &self.metadata.schema;
         let calldata = if schema == "ERC721" {
-            let sig = ethers_core::utils::id("transferFrom(address,address,uint256)");
+            // TODO: abigen should emit this as a typesafe method over a "Typed" BaseContract
+            let abi = ethers::contract::BaseContract::from(contracts::OPENSEA_ABI.clone());
+            let sig = id("transferFrom(address,address,uint256)");
             let data = (Address::zero(), args.recipient, args.token_id);
+
+            order.replacement_pattern = hex::decode("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap().into();
             abi.encode_with_selector(sig, data).unwrap()
         } else if schema == "ERC1155" {
             unimplemented!()
         } else {
             panic!("Unsupported schema")
         };
-
-        let fee_recipient = if self.fee_recipient.address == Address::zero() {
-            *constants::OPENSEA_FEE_RECIPIENT
-        } else {
-            Address::zero()
-        };
+        order.calldata = calldata;
 
         #[cfg(test)]
         let listing_time = args
@@ -206,32 +214,20 @@ impl Order {
             .unwrap_or_else(|| chrono::offset::Local::now().timestamp() as u64);
         #[cfg(not(test))]
         let listing_time = chrono::offset::Local::now().timestamp() as u64;
-        // a bit in the past
-        let listing_time = listing_time - 100;
-
-        let mut order = MinimalOrder::from(self.clone());
-        order.maker = args.taker;
-        order.target = args.token;
-        order.calldata = calldata;
-        order.fee_recipient = fee_recipient;
-        order.taker = self.maker.address;
-        order.listing_time = listing_time.into();
-
-        order.expiration_time = 0.into();
-        order.extra = 0.into();
+        order.listing_time = (listing_time - 100).into();
 
         order
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Metadata {
+pub struct Metadata {
     asset: AssetId,
     schema: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct AssetId {
+pub struct AssetId {
     #[serde(deserialize_with = "u256_from_dec_str")]
     id: U256,
     address: Address,
@@ -247,7 +243,7 @@ where
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct User {
+pub struct User {
     user: Username,
     profile_img_url: String,
     address: Address,
@@ -255,7 +251,7 @@ struct User {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Username {
+pub struct Username {
     username: Option<String>,
 }
 

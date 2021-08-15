@@ -22,3 +22,23 @@ cargo run
 * [ ] Opensea Contract clients
     * [ ] Generalize the API to arbitrary Opensea marketplace schemas
 * [ ] CLI for operations
+
+## Running ignored tests
+
+1. Create a `hardhat.config.js` file and fork from mainnet at this block:
+
+```
+export default {
+  networks: {
+    hardhat: {
+      forking: {
+        url: "https://eth-mainnet.alchemyapi.io/v2/6qChHD3n9AMo1hC4luVgYMPSqoOwP3II",
+        blockNumber: 13031640,
+      },
+      hardfork: "london",
+    }
+  }
+}
+```
+
+2. `cargo test --ignored`
