@@ -1,8 +1,6 @@
 use crate::constants;
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
 use ethers_core::types::{Address, Bytes, H256, U256};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub enum Network {
@@ -29,31 +27,8 @@ impl Network {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct OpenSeaApiConfig {
-    pub api_key: Option<String>,
-    pub network: Network,
-}
-
-impl Default for OpenSeaApiConfig {
-    fn default() -> Self {
-        Self {
-            api_key: None,
-            network: Network::Mainnet,
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum OpenSeaApiError {
-    #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
-    #[error(transparent)]
-    SerdeJson(#[from] serde_json::Error),
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Asset {}
+pub struct Asset {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// The exact arguments required to provide to the smart contract
@@ -188,10 +163,6 @@ pub struct Order {
     fee_method: u8,
 }
 
-use once_cell::sync::Lazy;
-
-pub static OPENSEA_FEE_RECIPIENT: Lazy<Address> = Lazy::new(|| "".parse().unwrap());
-
 pub struct BuyArgs {
     pub taker: Address,
     pub recipient: Address,
@@ -224,7 +195,7 @@ impl Order {
         };
 
         let fee_recipient = if self.fee_recipient.address == Address::zero() {
-            *OPENSEA_FEE_RECIPIENT
+            *constants::OPENSEA_FEE_RECIPIENT
         } else {
             Address::zero()
         };
