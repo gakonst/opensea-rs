@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore]
+    #[ignore]
     async fn can_buy_an_erc1155() {
         let provider = Provider::try_from("http://localhost:8545").unwrap();
         let provider = Arc::new(provider);
