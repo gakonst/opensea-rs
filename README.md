@@ -35,7 +35,7 @@ export default {
     hardhat: {
       forking: {
         url: "https://eth-mainnet.alchemyapi.io/v2/6qChHD3n9AMo1hC4luVgYMPSqoOwP3II",
-        blockNumber: 13031640,
+        blockNumber: 13037331,
       },
       hardfork: "london",
     }

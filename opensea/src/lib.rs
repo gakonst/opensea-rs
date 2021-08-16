@@ -179,7 +179,6 @@ mod tests {
             token: address,
             recipient: taker,
             timestamp: Some(timestamp - 100),
-            token_number: None,
         };
 
         // instantiate the client
@@ -207,12 +206,11 @@ mod tests {
 
         let taker = accounts[0].clone();
 
-        let address = "0x76be3b62873462d2142405439777e971754e8e77"
+        let address = "0x47e22659d9ae152975e6cbfa2eed5dc8b75ac545"
             .parse::<Address>()
             .unwrap();
         let nft = NFT::new(address, provider.clone());
-        let token_id = 31.into();
-        let number = 1.into();
+        let token_id = 1.into();
 
         let block = provider
             .get_block(BlockNumber::Latest)
@@ -228,7 +226,6 @@ mod tests {
             token: address,
             recipient: taker,
             timestamp: Some(timestamp - 100),
-            token_number: Some(number),
         };
 
         // instantiate the client
@@ -240,7 +237,8 @@ mod tests {
         let sent = call.send().await.unwrap();
 
         // wait for it to be confirmed
-        let _receipt = sent.await.unwrap();
+        let receipt = sent.await.unwrap();
+        dbg!(receipt);
         // check the owner matches
         let num = nft.balance_of(taker, token_id).call().await.unwrap();
         assert_eq!(num, 1.into());
