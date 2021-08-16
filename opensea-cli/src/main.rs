@@ -21,7 +21,10 @@ struct Opts {
     ids: Vec<U256>,
 
     #[structopt(long, short)]
-    flashbots: bool,
+    bribe_receiver: Option<Address>,
+
+    #[structopt(long, short, parse(from_str = parse_u256))]
+    bribe: Option<U256>,
 }
 
 fn parse_u256(s: &str) -> U256 {
@@ -44,7 +47,9 @@ async fn main() -> color_eyre::Result<()> {
     let timestamp = block.timestamp.as_u64();
 
     // Add signer and Flashbots middleware
-    if opts.flashbots {
+    if let Some(bribe_receiver) = opts.bribe_receiver {
+        let bribe = opts.bribe.expect("no bribe amount set");
+
         let bundle_signer = LocalWallet::new(&mut ethers::core::rand::thread_rng());
         let provider = FlashbotsMiddleware::new(
             provider,
@@ -72,6 +77,15 @@ async fn main() -> color_eyre::Result<()> {
             let rlp = call.tx.rlp_signed(chain_id, &signature);
             bundle = bundle.push_transaction(rlp);
         }
+
+        // TODO: Add any extra calldata for consistency checks
+        let tx = Eip1559TransactionRequest::new()
+            .to(bribe_receiver)
+            .value(bribe)
+            .into();
+        let signature = client.signer().sign_transaction(&tx).await?;
+        let rlp = tx.rlp_signed(chain_id, &signature);
+        bundle = bundle.push_transaction(rlp);
 
         let simulated_bundle = client.inner().simulate_bundle(&bundle).await?;
         println!("Simulated bundle: {:?}", simulated_bundle);
