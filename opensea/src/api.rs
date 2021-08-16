@@ -1,4 +1,4 @@
-use ethers::types::Address;
+use ethers::types::{Address, U256};
 use reqwest::{
     header::{self, HeaderMap},
     Client, ClientBuilder,
@@ -49,7 +49,6 @@ impl OpenSeaApi {
 
         let res = self.client.get(url).query(&map).send().await?;
         let text = res.text().await?;
-        // dbg!(&text);
         let resp: OrderResponse = serde_json::from_str(&text)?;
 
         Ok(resp.orders)
@@ -57,8 +56,8 @@ impl OpenSeaApi {
 
     pub async fn get_order(&self, mut req: OrderRequest) -> Result<Order, OpenSeaApiError> {
         req.limit = 1;
-        let res = self.get_orders(req).await?;
-        let order = res.into_iter().next().unwrap();
+        let res = self.get_orders(req.clone()).await?;
+        let order = res.into_iter().next().ok_or_else(|| OpenSeaApiError::OrderNotFound { contract: req.contract_address, id: req.token_id.into()})?;
         Ok(order)
     }
 }
@@ -99,6 +98,8 @@ pub enum OpenSeaApiError {
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Order not found (token: {contract}, id: {id}")]
+    OrderNotFound { contract: Address, id: U256 },
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ use types::MinimalOrder;
 #[derive(Clone)]
 pub struct Client<M> {
     api: OpenSeaApi,
-    contracts: OpenSea<M>,
+    pub contracts: OpenSea<M>,
 }
 
 #[derive(Debug, Error)]

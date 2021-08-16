@@ -1,70 +1,110 @@
 use ethers::{prelude::*, utils::parse_units};
-use gumdrop::Options;
 use opensea::{api::OpenSeaApiConfig, BuyArgs, Client};
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
-#[derive(Debug, Options, Clone)]
-struct Opts {
-    help: bool,
+use structopt::StructOpt;
 
-    #[options(
-        default = "http://localhost:8545",
-        help = "The tracing / archival node's URL"
-    )]
+use ethers_flashbots::FlashbotsMiddleware;
+
+#[derive(StructOpt, Debug, Clone)]
+struct Opts {
+    #[structopt(long, short, help = "The tracing / archival node's URL")]
     url: String,
 
-    #[options(help = "Your private key string")]
+    #[structopt(long, short, help = "Your private key string")]
     private_key: String,
 
-    #[options(help = "The NFT address you want to buy")]
+    #[structopt(long, short, help = "The NFT address you want to buy")]
     address: Address,
 
-    #[options(
-        help = "The NFT id you want to buy",
-        parse(try_from_str = "U256::from_dec_str")
-    )]
-    id: U256,
+    #[structopt(long, short, help = "The NFT id you want to buy", parse(from_str = parse_u256))]
+    ids: Vec<U256>,
+
+    #[structopt(long, short)]
+    flashbots: bool,
+}
+
+fn parse_u256(s: &str) -> U256 {
+    U256::from_dec_str(s).unwrap()
 }
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    let opts = Opts::parse_args_default_or_exit();
+    let opts = Opts::from_args();
 
-    let provider = Provider::try_from(opts.url)?;
+    let provider = Provider::try_from(opts.url.as_str())?;
+    let provider = Arc::new(provider);
+
     let chain_id = provider.get_chainid().await?.as_u64();
     let signer = LocalWallet::from_str(&opts.private_key)?.with_chain_id(chain_id);
     let taker = signer.address();
-    let provider = SignerMiddleware::new(provider, signer);
 
     // set up the args
     let block = provider.get_block(BlockNumber::Latest).await?.unwrap();
     let timestamp = block.timestamp.as_u64();
-    let args = BuyArgs {
-        token_id: opts.id,
-        taker,
-        token: opts.address,
-        recipient: taker,
-        timestamp: Some(timestamp - 100),
-    };
 
-    // instantiate the client
-    let provider = Arc::new(provider);
-    let client = Client::new(provider, OpenSeaApiConfig::default());
+    // Add signer and Flashbots middleware
+    if opts.flashbots {
+        let bundle_signer = LocalWallet::new(&mut ethers::core::rand::thread_rng());
+        let provider = FlashbotsMiddleware::new(
+            provider,
+            url::Url::parse("https://relay.flashbots.net")?,
+            bundle_signer,
+        );
 
-    // execute the call
-    let call = client.buy(args).await.unwrap();
-    dbg!(&hex::encode(call.calldata().unwrap()));
+        let provider = SignerMiddleware::new(provider, signer);
+        let provider = Arc::new(provider);
+        let opensea = Client::new(provider, OpenSeaApiConfig::default());
+        let client = (*opensea.contracts).client();
 
-    // TODO: Automatic gas estimation for 1559 txs
-    let call = call.gas_price(parse_units(100, 9).unwrap());
+        let mut bundle = ethers_flashbots::BundleRequest::new();
+        for id in opts.ids {
+            let args = BuyArgs {
+                token_id: id,
+                taker,
+                token: opts.address,
+                recipient: taker,
+                timestamp: Some(timestamp - 100),
+            };
 
-    let sent = call.send().await.unwrap();
-    println!("Sent tx {:?}", *sent);
+            let call = opensea.buy(args).await.unwrap();
+            let signature = client.signer().sign_transaction(&call.tx).await?;
+            let rlp = call.tx.rlp_signed(chain_id, &signature);
+            bundle = bundle.push_transaction(rlp);
+        }
 
-    // wait for it to be confirmed
-    let _receipt = sent.await.unwrap();
+        let simulated_bundle = client.inner().simulate_bundle(&bundle).await?;
+        println!("Simulated bundle: {:?}", simulated_bundle);
+        let res = client.inner().send_bundle(&bundle).await?;
+        println!("Bundle executed: {:?}", res);
+    } else {
+        let provider = SignerMiddleware::new(provider, signer);
+        let provider = Arc::new(provider);
+        let client = Client::new(provider, OpenSeaApiConfig::default());
 
-    println!("Confirmed!");
+        let args = BuyArgs {
+            token_id: *opts.ids.iter().next().unwrap(),
+            taker,
+            token: opts.address,
+            recipient: taker,
+            timestamp: Some(timestamp - 100),
+        };
+
+        // execute the call
+        let call = client.buy(args).await.unwrap();
+
+        // TODO: Automatic gas estimation for 1559 txs
+        let call = call.gas_price(parse_units(100, 9).unwrap());
+
+        let sent = call.send().await.unwrap();
+        println!("Sent tx {:?}", *sent);
+
+        // wait for it to be confirmed
+        let receipt = sent.await.unwrap().unwrap();
+
+        println!("Confirmed!");
+        assert_eq!(receipt.status.unwrap(), 1.into());
+    }
 
     Ok(())
 }
