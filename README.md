@@ -17,11 +17,13 @@ cargo run
 
 ## Roadmap
 
-* [ ] Opensea API
-* [ ] Opensea Types (Orders etc.)
-* [ ] Opensea Contract clients
+* [x] Opensea API
+* [x] Opensea Types (Orders etc.)
+* [x] Opensea Contract clients
+    * [x] ERC721
+    * [x] ERC1155
     * [ ] Generalize the API to arbitrary Opensea marketplace schemas
-* [ ] CLI for operations
+* [x] CLI for operations
 
 ## Running ignored tests
 
