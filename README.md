@@ -12,7 +12,13 @@ We use the standard Rust toolchain
 cargo check
 cargo test
 cargo doc --open
-cargo run
+cargo r -- \
+    --url http://localhost:8545 \
+    --private-key <your private key without 0x> \
+    --address <your address> \
+    --ids 1 \
+    --ids 2 \
+    --flashbots
 ```
 
 ## Roadmap
@@ -48,14 +54,20 @@ export default {
 ## CLI Usage
 
 ```
-./target/debug/opensea-cli -h
-Usage: ./target/debug/opensea-cli [OPTIONS]
+$ ./target/debug/opensea-cli -h
+opensea-cli 0.1.0
 
-Optional arguments:
-  -h, --help
-  -u, --url URL          The tracing / archival node's URL (default: http://localhost:8545)
-  -p, --private-key PRIVATE-KEY
-                         Your private key string
-  -a, --address ADDRESS  The NFT address you want to buy
-  -i, --id ID            The NFT id you want to buy
+USAGE:
+    opensea-cli [FLAGS] [OPTIONS] --address <address> --private-key <private-key> --url <url>
+
+FLAGS:
+    -f, --flashbots
+    -h, --help         Prints help information
+    -V, --version      Prints version information
+
+OPTIONS:
+    -a, --address <address>            The NFT address you want to buy
+    -i, --ids <ids>...                 The NFT id you want to buy
+    -p, --private-key <private-key>    Your private key string
+    -u, --url <url>                    The tracing / archival node's URL
 ```
