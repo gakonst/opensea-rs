@@ -44,7 +44,6 @@ async fn main() -> color_eyre::Result<()> {
         taker,
         token: opts.address,
         recipient: taker,
-        token_number: None,
         timestamp: Some(timestamp - 100),
     };
 

@@ -146,11 +146,12 @@ mod tests {
         NFT,
         r#"[
         function ownerOf(uint256) view returns (address)
+        function balanceOf(address,uint256) view returns (uint256)
     ]"#
     );
 
     #[tokio::test]
-    #[ignore]
+    // #[ignore]
     async fn can_buy_an_nft() {
         let provider = Provider::try_from("http://localhost:8545").unwrap();
         let provider = Arc::new(provider);
@@ -180,14 +181,12 @@ mod tests {
             timestamp: Some(timestamp - 100),
             token_number: None,
         };
-        dbg!(&args);
 
         // instantiate the client
         let client = Client::new(provider.clone(), OpenSeaApiConfig::default());
 
         // execute the call
         let call = client.buy(args).await.unwrap();
-        dbg!(&hex::encode(call.calldata().unwrap()));
         let call = call.gas_price(parse_units(100, 9).unwrap());
         let sent = call.send().await.unwrap();
 
@@ -196,5 +195,54 @@ mod tests {
         // check the owner matches
         let owner = nft.owner_of(id).call().await.unwrap();
         assert_eq!(owner, taker);
+    }
+
+    #[tokio::test]
+    // #[ignore]
+    async fn can_buy_an_erc1155() {
+        let provider = Provider::try_from("http://localhost:8545").unwrap();
+        let provider = Arc::new(provider);
+
+        let accounts = provider.get_accounts().await.unwrap();
+
+        let taker = accounts[0].clone();
+
+        let address = "0x76be3b62873462d2142405439777e971754e8e77"
+            .parse::<Address>()
+            .unwrap();
+        let nft = NFT::new(address, provider.clone());
+        let token_id = 31.into();
+        let number = 1.into();
+
+        let block = provider
+            .get_block(BlockNumber::Latest)
+            .await
+            .unwrap()
+            .unwrap();
+        let timestamp = block.timestamp.as_u64();
+
+        // set up the args
+        let args = BuyArgs {
+            token_id,
+            taker,
+            token: address,
+            recipient: taker,
+            timestamp: Some(timestamp - 100),
+            token_number: Some(number),
+        };
+
+        // instantiate the client
+        let client = Client::new(provider.clone(), OpenSeaApiConfig::default());
+
+        // execute the call
+        let call = client.buy(args).await.unwrap();
+        let call = call.gas_price(parse_units(100, 9).unwrap());
+        let sent = call.send().await.unwrap();
+
+        // wait for it to be confirmed
+        let _receipt = sent.await.unwrap();
+        // check the owner matches
+        let num = nft.balance_of(taker, token_id).call().await.unwrap();
+        assert_eq!(num, 1.into());
     }
 }

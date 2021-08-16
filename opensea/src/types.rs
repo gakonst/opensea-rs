@@ -172,8 +172,6 @@ pub struct BuyArgs {
     pub recipient: Address,
     pub token: Address,
     pub token_id: U256,
-    // for 1155s
-    pub token_number: Option<U256>,
     pub timestamp: Option<u64>,
 }
 
@@ -202,7 +200,19 @@ impl Order {
             order.replacement_pattern = hex::decode("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap().into();
             abi.encode_with_selector(sig, data).unwrap()
         } else if schema == "ERC1155" {
-            unimplemented!()
+            // safeTransferFrom(address,address,uint256,uint256,bytes), replacement for `from`
+            order.replacement_pattern = hex::decode("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap().into();
+
+            let abi = ethers::contract::BaseContract::from(contracts::OPENSEA_ABI.clone());
+            let sig = id("safeTransferFrom(address,address,uint256,uint256,bytes)");
+            let data = (
+                Address::zero(),
+                args.recipient,
+                args.token_id,
+                self.quantity,
+                Vec::<u8>::new(),
+            );
+            abi.encode_with_selector(sig, data).unwrap()
         } else {
             panic!("Unsupported schema")
         };
@@ -210,8 +220,8 @@ impl Order {
 
         let listing_time = args
             .timestamp
-            .unwrap_or_else(|| chrono::offset::Local::now().timestamp() as u64);
-        order.listing_time = (listing_time - 100).into();
+            .unwrap_or_else(|| chrono::offset::Local::now().timestamp() as u64 - 100);
+        order.listing_time = listing_time.into();
 
         order
     }
