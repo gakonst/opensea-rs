@@ -1,6 +1,7 @@
 use ethers::{prelude::*, types::transaction::eip2718::TypedTransaction, utils::parse_units};
 use opensea::{api::OpenSeaApiConfig, BuyArgs, Client};
-use std::{convert::TryFrom, str::FromStr, sync::Arc};
+use std::io::{self, BufRead};
+use std::{convert::TryFrom, fs::File, path::PathBuf, str::FromStr, sync::Arc};
 
 use structopt::StructOpt;
 
@@ -17,8 +18,14 @@ struct Opts {
     #[structopt(long, short, help = "The NFT address you want to buy")]
     address: Address,
 
-    #[structopt(long, short, help = "The NFT id you want to buy", parse(from_str = parse_u256))]
+    #[structopt(long, help = "The NFT id(s) you want to buy", parse(from_str = parse_u256))]
     ids: Vec<U256>,
+
+    #[structopt(
+        long,
+        help = "The file containing the NFT id(s) you want to buy"
+    )]
+    ids_path: Option<PathBuf>,
 
     #[structopt(long)]
     bribe_receiver: Option<Address>,
@@ -30,6 +37,14 @@ struct Opts {
 fn parse_u256(s: &str) -> U256 {
     U256::from_dec_str(s).unwrap()
 }
+
+ethers::contract::abigen!(
+    NFT,
+    r#"[
+        function ownerOf(uint256) view returns (address)
+        function balanceOf(address,uint256) view returns (uint256)
+    ]"#
+);
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -76,7 +91,20 @@ async fn main() -> color_eyre::Result<()> {
         }
 
         // 1. construct the transactions w/ pre-calculated nonces
-        let ids = opts.ids.clone();
+        let ids = if let Some(ids_path) = opts.ids_path {
+            let file = File::open(ids_path)?;
+            let lines = std::io::BufReader::new(file).lines();
+            let mut ids = Vec::new();
+            for line in lines {
+                let line = line?;
+                let id = U256::from_dec_str(&line)?;
+                ids.push(id);
+            }
+            ids
+        } else {
+            opts.ids.clone()
+        };
+
         let mut nonce = client.get_transaction_count(taker, None).await?;
         // TODO: Can we convert this to an iterator?
         let txs = {
@@ -156,7 +184,7 @@ async fn main() -> color_eyre::Result<()> {
     } else {
         let provider = SignerMiddleware::new(provider, signer);
         let provider = Arc::new(provider);
-        let client = Client::new(provider, OpenSeaApiConfig::default());
+        let opensea = Client::new(provider.clone(), OpenSeaApiConfig::default());
 
         let args = BuyArgs {
             token_id: *opts.ids.get(0).unwrap(),
@@ -166,8 +194,16 @@ async fn main() -> color_eyre::Result<()> {
             timestamp: Some(timestamp - 100),
         };
 
+        let nft = NFT::new(opts.address, provider);
+
+        let balance = nft.balance_of(args.recipient, args.token_id).call().await?;
+        println!(
+            "BalanceOf owner of NFT {:?} before is {:?}",
+            args.token_id, balance
+        );
+
         // execute the call
-        let call = client.buy(args).await.unwrap();
+        let call = opensea.buy(args.clone()).await.unwrap();
 
         // TODO: Automatic gas estimation for 1559 txs
         let call = call.gas_price(parse_units(100, 9).unwrap());
@@ -180,6 +216,12 @@ async fn main() -> color_eyre::Result<()> {
 
         println!("Confirmed!");
         assert_eq!(receipt.status.unwrap(), 1.into());
+
+        let balance = nft.balance_of(args.recipient, args.token_id).call().await?;
+        println!(
+            "BalanceOf owner of NFT {:?} after is {:?}",
+            args.token_id, balance
+        );
     }
 
     Ok(())
