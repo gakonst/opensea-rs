@@ -29,6 +29,9 @@ struct Opts {
 
     #[structopt(long, parse(from_str = parse_u256))]
     bribe: Option<U256>,
+
+    #[structopt(long)]
+    erc1155: bool,
 }
 
 fn parse_u256(s: &str) -> U256 {
@@ -95,7 +98,7 @@ async fn main() -> color_eyre::Result<()> {
     // TODO: Can we convert this to an iterator?
     let txs = {
         let mut txs = Vec::new();
-        for id in ids {
+        for id in &ids {
             let mut args = args.clone();
             args.token_id = id.into();
             let tx = opensea.buy(args).await.unwrap().tx;
@@ -118,11 +121,23 @@ async fn main() -> color_eyre::Result<()> {
         txs
     };
 
-    let balance = nft.balance_of(args.recipient, args.token_id).call().await?;
-    println!(
-        "BalanceOf owner of NFT {:?} before is {:?}",
-        args.token_id, balance
-    );
+    println!("Querying current owners...");
+
+    for id in &ids {
+        if opts.erc1155 {
+            let balance = nft.balance_of(args.recipient, *id).call().await?;
+            println!(
+                "Before: {:?} owns {:?} ERC1155 NFTs with token id {:?}",
+                args.recipient, balance, id
+            );
+        } else {
+            let owner = nft.owner_of(*id).call().await?;
+            println!(
+                "Before: Owner of ERC721 NFTs with token id {:?}: {:?}",
+                id, owner
+            );
+        }
+    }
 
     if let Some(bribe) = opts.bribe {
         // Add signer and Flashbots middleware
@@ -139,6 +154,10 @@ async fn main() -> color_eyre::Result<()> {
         // tx to the bundle, if not, spread the tx fee evenly across all txs
         let txs = match opts.bribe_receiver {
             Some(bribe_receiver) => {
+                println!(
+                    "Adding bribe tx to the bundle. Bribe Receiver {:?}, Amount: {:?}",
+                    bribe_receiver, bribe
+                );
                 let mut txs = txs;
                 let tx = Eip1559TransactionRequest::new()
                     .to(bribe_receiver)
@@ -149,6 +168,11 @@ async fn main() -> color_eyre::Result<()> {
             }
             None => {
                 let priority_fee_per_tx = bribe / opts.ids.len();
+                println!(
+                    "Splitting bribe across {:?} txs in the bundle. Amount per tx: {:?}",
+                    opts.ids.len(),
+                    priority_fee_per_tx
+                );
                 txs.into_iter()
                     .map(|mut tx| {
                         // bump the max base fee by the priority fee
@@ -165,7 +189,12 @@ async fn main() -> color_eyre::Result<()> {
         // Create the signed txs bundle
         let bundle = {
             let mut bundle = ethers_flashbots::BundleRequest::new();
-            for tx in txs {
+            for (tx, id) in txs.into_iter().zip(&ids) {
+                println!(
+                    "[TokenId = {:?}] Signing bundle tx with {:?} ETH",
+                    id,
+                    tx.value.unwrap()
+                );
                 let tx = tx.into();
                 let signature = provider.signer().sign_transaction(&tx).await?;
                 let rlp = tx.rlp_signed(chain_id, &signature);
@@ -188,19 +217,37 @@ async fn main() -> color_eyre::Result<()> {
         let provider = SignerMiddleware::new(provider, signer);
         let provider = Arc::new(provider);
 
-        for tx in txs {
+        for (tx, id) in txs.into_iter().zip(&ids) {
             let fee = parse_units(100, 9).unwrap();
             let tx = tx.max_fee_per_gas(fee);
+
+            println!(
+                "[Token Id = {:?}] Sending tx with {:?} ETH ",
+                id,
+                tx.value.unwrap()
+            );
             let pending_tx = provider.send_transaction(tx, None).await?;
-            println!("Sent tx {:?}", *pending_tx);
+            println!("[Token Id = {:?}] Sent tx {:?}", id, *pending_tx);
+            let receipt = pending_tx.await?.unwrap();
+            assert_eq!(receipt.status, Some(1.into()));
         }
     }
 
-    let balance = nft.balance_of(args.recipient, args.token_id).call().await?;
-    println!(
-        "BalanceOf owner of NFT {:?} after is {:?}",
-        args.token_id, balance
-    );
+    for id in &ids {
+        if opts.erc1155 {
+            let balance = nft.balance_of(args.recipient, *id).call().await?;
+            println!(
+                "After: {:?} owns {:?} ERC1155 NFTs with token id {:?}",
+                args.recipient, balance, id
+            );
+        } else {
+            let owner = nft.owner_of(*id).call().await?;
+            println!(
+                "After: Owner of ERC721 NFTs with token id {:?}: {:?}",
+                id, owner
+            );
+        }
+    }
 
     Ok(())
 }
