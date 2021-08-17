@@ -1,4 +1,4 @@
-use ethers::{prelude::*, utils::parse_units};
+use ethers::{prelude::*, types::transaction::eip2718::TypedTransaction, utils::parse_units};
 use opensea::{api::OpenSeaApiConfig, BuyArgs, Client};
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
@@ -63,6 +63,17 @@ async fn main() -> color_eyre::Result<()> {
         let client = (*opensea.contracts).client();
 
         let mut bundle = ethers_flashbots::BundleRequest::new();
+
+        let base_fee = block.base_fee_per_gas.expect("No basefee found");
+        // get the max basefee 5 blocks in the future
+        let mut max_base_fee = base_fee;
+        for _ in 0..5 {
+            max_base_fee *= 1125 / 1000;
+        }
+
+        // evenly spit the priority fee across all transactions
+        let priority_fee_per_tx = bribe / opts.ids.len();
+
         for id in opts.ids {
             let args = BuyArgs {
                 token_id: id,
@@ -72,20 +83,19 @@ async fn main() -> color_eyre::Result<()> {
                 timestamp: Some(timestamp - 100),
             };
 
-            let call = opensea.buy(args).await.unwrap();
-            let signature = client.signer().sign_transaction(&call.tx).await?;
-            let rlp = call.tx.rlp_signed(chain_id, &signature);
+            let tx = opensea.buy(args).await.unwrap().tx;
+            let mut tx = match tx {
+                TypedTransaction::Eip1559(inner) => inner,
+                _ => panic!("Did not expect non-1559 tx"),
+            };
+            tx.max_fee_per_gas = Some(max_base_fee + priority_fee_per_tx);
+            tx.max_priority_fee_per_gas = Some(priority_fee_per_tx);
+
+            let tx = tx.into();
+            let signature = client.signer().sign_transaction(&tx).await?;
+            let rlp = tx.rlp_signed(chain_id, &signature);
             bundle = bundle.push_transaction(rlp);
         }
-
-        // TODO: Add any extra calldata for consistency checks
-        let tx = Eip1559TransactionRequest::new()
-            .to(bribe_receiver)
-            .value(bribe)
-            .into();
-        let signature = client.signer().sign_transaction(&tx).await?;
-        let rlp = tx.rlp_signed(chain_id, &signature);
-        bundle = bundle.push_transaction(rlp);
 
         let simulated_bundle = client.inner().simulate_bundle(&bundle).await?;
         println!("Simulated bundle: {:?}", simulated_bundle);
@@ -97,7 +107,7 @@ async fn main() -> color_eyre::Result<()> {
         let client = Client::new(provider, OpenSeaApiConfig::default());
 
         let args = BuyArgs {
-            token_id: *opts.ids.iter().next().unwrap(),
+            token_id: *opts.ids.get(0).unwrap(),
             taker,
             token: opts.address,
             recipient: taker,

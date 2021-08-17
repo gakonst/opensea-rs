@@ -57,7 +57,13 @@ impl OpenSeaApi {
     pub async fn get_order(&self, mut req: OrderRequest) -> Result<Order, OpenSeaApiError> {
         req.limit = 1;
         let res = self.get_orders(req.clone()).await?;
-        let order = res.into_iter().next().ok_or_else(|| OpenSeaApiError::OrderNotFound { contract: req.contract_address, id: req.token_id.into()})?;
+        let order = res
+            .into_iter()
+            .next()
+            .ok_or_else(|| OpenSeaApiError::OrderNotFound {
+                contract: req.contract_address,
+                id: req.token_id.into(),
+            })?;
         Ok(order)
     }
 }
