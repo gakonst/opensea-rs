@@ -15,6 +15,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use types::MinimalOrder;
 
+#[derive(Clone)]
 pub struct Client<M> {
     api: OpenSeaApi,
     contracts: OpenSea<M>,
@@ -39,9 +40,19 @@ impl<M: Middleware> Client<M> {
             side: 1,
             token_id: args.token_id.as_u64(),
             contract_address: args.token,
-            limit: 1,
+            // use max limit
+            limit: 50,
         };
-        let sell = self.api.get_order(req).await?;
+        let orders = self.api.get_orders(req.clone()).await?;
+        // get the cheapest order
+        let sell = orders
+            .iter()
+            .min_by_key(|order| order.base_price)
+            .expect(&format!(
+                "could not find cheapest order for {}",
+                req.token_id
+            ))
+            .clone();
 
         // make its corresponding buy
         let buy = sell.match_sell(args);
