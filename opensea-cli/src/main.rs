@@ -30,7 +30,10 @@ struct Opts {
     #[structopt(long, parse(from_str = parse_u256))]
     bribe: Option<U256>,
 
-    #[structopt(long)]
+    #[structopt(
+        long,
+        help = "Whether you're buying an ERC721 or an ERC1155 (true for 1155)"
+    )]
     erc1155: bool,
 }
 

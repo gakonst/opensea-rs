@@ -18,7 +18,7 @@ cargo r -- \
     --address <your address> \
     --ids 1 \
     --ids 2 \
-    --flashbots
+    --erc1155
 ```
 
 ## Roadmap
@@ -61,13 +61,16 @@ USAGE:
     opensea-cli [FLAGS] [OPTIONS] --address <address> --private-key <private-key> --url <url>
 
 FLAGS:
-    -f, --flashbots
-    -h, --help         Prints help information
-    -V, --version      Prints version information
+        --erc1155
+    -h, --help       Prints help information
+    -V, --version    Prints version information
 
 OPTIONS:
-    -a, --address <address>            The NFT address you want to buy
-    -i, --ids <ids>...                 The NFT id you want to buy
-    -p, --private-key <private-key>    Your private key string
-    -u, --url <url>                    The tracing / archival node's URL
-```
+    -a, --address <address>                  The NFT address you want to buy
+        --bribe <bribe>
+        --bribe-receiver <bribe-receiver>
+        --ids <ids>...                       The NFT id(s) you want to buy
+        --ids-path <ids-path>                The file containing the NFT id(s) you want to buy
+    -p, --private-key <private-key>          Your private key string
+    -u, --url <url>                          The tracing / archival node's URL
+
