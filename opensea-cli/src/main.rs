@@ -150,7 +150,8 @@ async fn main() -> color_eyre::Result<()> {
         // 4. Send it!
         let simulated_bundle = client.inner().simulate_bundle(&bundle).await?;
         println!("Simulated bundle: {:?}", simulated_bundle);
-        let res = client.inner().send_bundle(&bundle).await?;
+        let pending_bundle = client.inner().send_bundle(&bundle).await?;
+        let res = pending_bundle.await?;
         println!("Bundle executed: {:?}", res);
     } else {
         let provider = SignerMiddleware::new(provider, signer);
