@@ -20,10 +20,10 @@ struct Opts {
     #[structopt(long, short, help = "The NFT id you want to buy", parse(from_str = parse_u256))]
     ids: Vec<U256>,
 
-    #[structopt(long, short)]
+    #[structopt(long)]
     bribe_receiver: Option<Address>,
 
-    #[structopt(long, short, parse(from_str = parse_u256))]
+    #[structopt(long, parse(from_str = parse_u256))]
     bribe: Option<U256>,
 }
 
@@ -47,9 +47,7 @@ async fn main() -> color_eyre::Result<()> {
     let timestamp = block.timestamp.as_u64();
 
     // Add signer and Flashbots middleware
-    if let Some(bribe_receiver) = opts.bribe_receiver {
-        let bribe = opts.bribe.expect("no bribe amount set");
-
+    if let Some(bribe) = opts.bribe {
         let bundle_signer = LocalWallet::new(&mut ethers::core::rand::thread_rng());
         let provider = FlashbotsMiddleware::new(
             provider,
@@ -62,7 +60,13 @@ async fn main() -> color_eyre::Result<()> {
         let opensea = Client::new(provider, OpenSeaApiConfig::default());
         let client = (*opensea.contracts).client();
 
-        let mut bundle = ethers_flashbots::BundleRequest::new();
+        let args = BuyArgs {
+            token_id: 0.into(),
+            taker,
+            token: opts.address,
+            recipient: taker,
+            timestamp: Some(timestamp - 100),
+        };
 
         let base_fee = block.base_fee_per_gas.expect("No basefee found");
         // get the max basefee 5 blocks in the future
@@ -71,32 +75,79 @@ async fn main() -> color_eyre::Result<()> {
             max_base_fee *= 1125 / 1000;
         }
 
-        // evenly spit the priority fee across all transactions
-        let priority_fee_per_tx = bribe / opts.ids.len();
+        // 1. construct the transactions w/ pre-calculated nonces
+        let ids = opts.ids.clone();
+        let mut nonce = client.get_transaction_count(taker, None).await?;
+        // TODO: Can we convert this to an iterator?
+        let txs = {
+            let mut txs = Vec::new();
+            for id in ids {
+                let mut args = args.clone();
+                args.token_id = id.into();
+                let tx = opensea.buy(args).await.unwrap().tx;
 
-        for id in opts.ids {
-            let args = BuyArgs {
-                token_id: id,
-                taker,
-                token: opts.address,
-                recipient: taker,
-                timestamp: Some(timestamp - 100),
-            };
+                // get the 1559 inner tx to configure the basefee
+                let mut tx = match tx {
+                    TypedTransaction::Eip1559(inner) => inner,
+                    _ => panic!("Did not expect non-1559 tx"),
+                };
 
-            let tx = opensea.buy(args).await.unwrap().tx;
-            let mut tx = match tx {
-                TypedTransaction::Eip1559(inner) => inner,
-                _ => panic!("Did not expect non-1559 tx"),
-            };
-            tx.max_fee_per_gas = Some(max_base_fee + priority_fee_per_tx);
-            tx.max_priority_fee_per_gas = Some(priority_fee_per_tx);
+                // initialize the max base fee value, without any priority fee
+                tx.max_fee_per_gas = Some(max_base_fee);
 
-            let tx = tx.into();
-            let signature = client.signer().sign_transaction(&tx).await?;
-            let rlp = tx.rlp_signed(chain_id, &signature);
-            bundle = bundle.push_transaction(rlp);
-        }
+                // set & increment the nonce
+                tx.nonce = Some(nonce);
+                nonce += 1.into();
 
+                txs.push(tx)
+            }
+            txs
+        };
+
+        // 2. if an address is explicitly specified to receive the bribe, add an extra
+        // tx to the bundle, if not, spread the tx fee evenly across all txs
+        let txs = match opts.bribe_receiver {
+            Some(bribe_receiver) => {
+                let mut txs = txs;
+                let tx = Eip1559TransactionRequest::new()
+                    .to(bribe_receiver)
+                    .value(bribe)
+                    .into();
+                txs.push(tx);
+                txs
+            }
+            None => {
+                let priority_fee_per_tx = bribe / opts.ids.len();
+                txs.into_iter()
+                    .map(|mut tx| {
+                        // bump the max base fee by the priority fee
+                        tx.max_fee_per_gas
+                            .as_mut()
+                            .map(|max_base_fee| *max_base_fee += priority_fee_per_tx);
+                        tx.max_priority_fee_per_gas = Some(priority_fee_per_tx);
+                        tx
+                    })
+                    .collect()
+            }
+        };
+
+        // 3. Create the signed txs bundle
+        let bundle = {
+            let mut bundle = ethers_flashbots::BundleRequest::new();
+            for tx in txs {
+                let tx = tx.into();
+                let signature = client.signer().sign_transaction(&tx).await?;
+                let rlp = tx.rlp_signed(chain_id, &signature);
+                bundle = bundle.push_transaction(rlp);
+            }
+            bundle
+        };
+
+        // set the block bundle
+        let num = block.number.unwrap();
+        let bundle = bundle.set_block(num).set_simulation_block(num);
+
+        // 4. Send it!
         let simulated_bundle = client.inner().simulate_bundle(&bundle).await?;
         println!("Simulated bundle: {:?}", simulated_bundle);
         let res = client.inner().send_bundle(&bundle).await?;
