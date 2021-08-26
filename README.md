@@ -28,6 +28,48 @@ SUBCOMMANDS:
 
 To view each individual subcommand's help menu, run: `opensea-cli <subcommand name> --help`
 
+### Buying NFT(s)
+
+Here's an example command for purchasing some ERC1155 NFTs using Flashbots:
+
+```bash
+cargo run buy \
+    --nft.erc1155 \
+    --nft.address "0xTheNFTAddress" \
+    --nft.ids 1 --nft.ids 2 --nft.ids 3 \
+    --eth.private_key "0xMyPrivateKey" \
+    --eth.url http://localhost:8545 \
+    --flashbots.bribe 1000000000000000000 \
+    --flashbots.bribe_receiver 0xYourBriberContract
+```
+
+Instead of providing `nft.ids`, you can also provide a CSV file via the `--nft.ids_path` command,
+where the first column contains the `id` of the NFT and the second column contains 
+the `quantity` of purchased NFT.
+
+Here's an ERC1155 example (which also requires passing the `--nft.erc1155` flag)
+
+```
+1,1
+2,5
+3,2
+```
+
+And an ERC721 example
+
+```
+1
+2
+3
+```
+
+**Flashbots Support**: This will proceed to create a Flashbots bundle with 4 transactions: 3 NFT take orders on
+OpenSea, and a 4th transaction which sends the bribe to the briber contract while also doing
+consistency checks that we have received the NFTs
+
+**Public Mempool**: If you omit the Flashbots parameters, it'll proceed to submit the transactions normally
+via the public mempool.
+
 ## Development
 
 ### Rust Toolchain
