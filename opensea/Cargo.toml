@@ -12,7 +12,7 @@ serde = "1.0.126"
 serde_json = "1.0.64"
 once_cell = "1.8.0"
 chrono = "0.4.19"
-ethers = { version = "0.4.0", features = ["abigen"] } # { git = "https://github.com/gakonst/ethers-rs", features = ["abigen"] }
+ethers = { version = "0.5.1", features = ["abigen"] }
 hex = "0.4.3"
 
 [dev-dependencies]
