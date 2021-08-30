@@ -1,4 +1,4 @@
-use ethers::types::{Address, U256};
+use ethers::types::Address;
 use reqwest::{
     header::{self, HeaderMap},
     Client, ClientBuilder,
@@ -60,7 +60,7 @@ impl OpenSeaApi {
         let order = res
             .into_iter()
             .next()
-            .ok_or_else(|| OpenSeaApiError::OrderNotFound {
+            .ok_or(OpenSeaApiError::OrderNotFound {
                 contract: req.contract_address,
                 id: req.token_id,
             })?;
@@ -120,7 +120,7 @@ mod tests {
 
         let req = OrderRequest {
             side: 1,
-            token_id: 2292,
+            token_id: 2292.to_string(),
             contract_address: "0x7d256d82b32d8003d1ca1a1526ed211e6e0da9e2"
                 .parse()
                 .unwrap(),
