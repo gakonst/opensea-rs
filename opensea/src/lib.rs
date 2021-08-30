@@ -30,7 +30,7 @@ pub async fn get_n_cheapest_orders(
     // get the order
     let req = OrderRequest {
         side: 1,
-        token_id: token_id.as_u64(),
+        token_id: token_id.to_string(),
         contract_address,
         // use max limit
         limit: 50,

@@ -62,7 +62,7 @@ impl OpenSeaApi {
             .next()
             .ok_or_else(|| OpenSeaApiError::OrderNotFound {
                 contract: req.contract_address,
-                id: req.token_id.into(),
+                id: req.token_id,
             })?;
         Ok(order)
     }
@@ -72,7 +72,7 @@ impl OpenSeaApi {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrderRequest {
     pub side: u64, // 0 for buy order
-    pub token_id: u64,
+    pub token_id: String,
     pub contract_address: Address,
     pub limit: u64,
 }
@@ -105,7 +105,7 @@ pub enum OpenSeaApiError {
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error("Order not found (token: {contract}, id: {id}")]
-    OrderNotFound { contract: Address, id: U256 },
+    OrderNotFound { contract: Address, id: String },
 }
 
 #[cfg(test)]
