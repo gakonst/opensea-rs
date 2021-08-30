@@ -197,6 +197,11 @@ impl Order {
         order.extra = 0.into();
         order.salt = ethers::core::rand::random::<u64>().into();
         order.fee_recipient = Address::zero(); // *constants::OPENSEA_FEE_RECIPIENT;
+        
+        order.maker_relayer_fee = 0.into();
+        order.taker_relayer_fee = 0.into();
+        order.maker_protocol_fee = 0.into();
+        order.taker_protocol_fee = 0.into();
 
         let schema = &self.metadata.schema;
         let calldata = if schema == "ERC721" {
