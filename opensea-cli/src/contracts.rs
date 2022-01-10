@@ -59,9 +59,15 @@ pub async fn deploy(opts: DeployOpts) -> color_eyre::Result<Address> {
     };
 
     // compile the briber contract each time
-    let solc = ethers::utils::Solc::new("briber.sol").build()?;
-    let contract = solc.get("NFTRevert").expect("could not find contract");
-    let briber = ContractFactory::new(contract.abi.clone(), contract.bytecode.clone(), provider);
+    let solc = Solc::default();
+    let input = CompilerInput::new("briber.sol")?;
+    let output = solc.compile(&input)?;
+    let contract = output.get("briber.sol", "NFTRevert").unwrap();
+    let briber = ContractFactory::new(
+        contract.abi.unwrap().clone(),
+        contract.bin.unwrap().clone(),
+        provider,
+    );
 
     // deploy it
     let call = briber.deploy(())?;
